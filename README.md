@@ -6,5 +6,5 @@
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install scikit-learn pandas plotly matplotlib seaborn
+pip install scikit-learn pandas plotly matplotlib seaborn numpy
 ```

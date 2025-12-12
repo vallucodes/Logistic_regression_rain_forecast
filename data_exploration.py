@@ -1,8 +1,6 @@
 import pandas as pd
-from sklearn.linear_model import LinearRegression
 import plotly.express as px
 import matplotlib
-import matplotlib.pyplot as plt
 import seaborn as sns
 
 raw_df = pd.read_csv('data/weatherAUS.csv')
