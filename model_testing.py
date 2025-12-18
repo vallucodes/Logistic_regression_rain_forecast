@@ -16,16 +16,34 @@ raw_df = pd.read_csv('data/weatherAUS.csv')
 # Remove lines with missing RainToday or RainTomorrow
 raw_df.dropna(subset=['RainToday', 'RainTomorrow'], inplace=True)
 
-# Split data into trainig, validation and testing sets
+# print(raw_df)
+
+# # Plot data amount each year
+# plt.title('asd')
+# sns.countplot(x=pd.to_datetime(raw_df.Date).dt.year)
+# plt.show()
+
 # Use data before 2015 for training, 2015 for validation and after 2015 for test
 year = pd.to_datetime(raw_df.Date).dt.year
 train_df = raw_df[year < 2015]
 val_df = raw_df[year == 2015]
 test_df = raw_df[year > 2015]
 
+# Drop certain columns
+# cols_to_drop = ['Pressure3pm', 'MaxTemp', 'WindGustSpeed', 'Humidity3pm', 'Temp3pm', 'Temp9am', 'Rainfall']
+# cols_to_drop = ['WindGustDir', 'WindDir9am', 'WindDir3pm']
+cols_to_drop = []
+
+
 # Define input columns and target columns
-input_cols = list(train_df.columns)[1:-1]
+input_cols = [
+    c for c in train_df.columns
+    if c not in cols_to_drop + ['Date', 'RainTomorrow']
+]
+# input_cols = list(train_df.columns)[1:-1]
 target_col = 'RainTomorrow'
+
+print(input_cols)
 
 # Create inputs and targets for each: train, validation and test data
 train_inputs = train_df[input_cols].copy()
@@ -38,24 +56,33 @@ test_inputs = test_df[input_cols].copy()
 test_targets = test_df[target_col].copy()
 
 # Separate numerical columns and categorical columns
-numeric_cols = train_inputs.select_dtypes(include=np.number).columns.tolist()
+# numeric_cols = train_inputs.select_dtypes(include=np.number).columns.tolist()
+numeric_cols = []
 categorical_cols = train_inputs.select_dtypes(include=np.object_).columns.tolist()
+# categorical_cols = []
 
-# Replace numeric NaN values with mean with imputer
-imputer = SimpleImputer(strategy ='mean')
-imputer.fit(raw_df[numeric_cols])
 
-train_inputs[numeric_cols] = imputer.transform(train_inputs[numeric_cols])
-val_inputs[numeric_cols] = imputer.transform(val_inputs[numeric_cols])
-test_inputs[numeric_cols] = imputer.transform(test_inputs[numeric_cols])
+# print(train_inputs[numeric_cols].describe())
+# print(len(train_inputs))
+# print(train_inputs[categorical_cols].nunique())
+# print(train_inputs[numeric_cols].isna().sum() / len(train_inputs) * 100)
 
-# Scale all numeric values to [-1, 1]
-scaler = MinMaxScaler()
-scaler.fit(raw_df[numeric_cols])
+if numeric_cols:
+    # Replace numeric NaN values with mean
+    imputer = SimpleImputer(strategy ='mean')
+    imputer.fit(raw_df[numeric_cols])
 
-train_inputs[numeric_cols] = scaler.transform(train_inputs[numeric_cols])
-val_inputs[numeric_cols] = scaler.transform(val_inputs[numeric_cols])
-test_inputs[numeric_cols] = scaler.transform(test_inputs[numeric_cols])
+    train_inputs[numeric_cols] = imputer.transform(train_inputs[numeric_cols])
+    val_inputs[numeric_cols] = imputer.transform(val_inputs[numeric_cols])
+    test_inputs[numeric_cols] = imputer.transform(test_inputs[numeric_cols])
+
+    # Scale all numeric values to [-1, 1]
+    scaler = MinMaxScaler()
+    scaler.fit(raw_df[numeric_cols])
+
+    train_inputs[numeric_cols] = scaler.transform(train_inputs[numeric_cols])
+    val_inputs[numeric_cols] = scaler.transform(val_inputs[numeric_cols])
+    test_inputs[numeric_cols] = scaler.transform(test_inputs[numeric_cols])
 
 # Encode categoricals data
 encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
@@ -81,9 +108,31 @@ test_encoded = pd.DataFrame(encoder.transform(test_inputs[categorical_cols]),
 )
 test_inputs = pd.concat([test_inputs[numeric_cols], test_encoded], axis=1)
 
-# Create and train the model
+# Create Logistic Regression model
 model = LogisticRegression(solver='liblinear')
+
 model.fit(train_inputs, train_targets)
+
+feature_names = numeric_cols + encoded_cols
+coef_df = pd.DataFrame({
+    "feature": feature_names,
+    "weight": model.coef_[0]
+})
+
+# # Print and plot coeffs and weights
+coef_df = coef_df.sort_values(by="weight", ascending=False)
+pd.set_option('display.max_rows', None)
+print(coef_df)
+# sns.barplot(data=coef_df.head(10), x='weight', y='feature')
+# plt.show()
+
+# # Print distribution of No and Yes prediction base on train_inputs data
+# train_preds = pd.Series(model.predict(train_inputs))
+# print("\nYes/No distribution:\n",train_preds.value_counts(normalize=True))
+
+# # Print predictions confidence levels for each input row
+# train_probs = model.predict_proba(train_inputs)
+# print("\nconfidence levels:\n", train_probs)
 
 def predict_and_plot(inputs, targets, name=''):
     preds = model.predict(inputs)
@@ -102,4 +151,15 @@ def predict_and_plot(inputs, targets, name=''):
     plt.show()
     return preds
 
+# train_preds = predict_and_plot(train_inputs, train_targets, 'Training')
+# val_preds = predict_and_plot(val_inputs, val_targets, 'Validation')
 test_preds = predict_and_plot(test_inputs, test_targets, 'Prediction')
+
+def random_guess(inputs):
+    return np.random.choice(["No", "Yes"], len(inputs))
+
+def all_no(inputs):
+    return np.full(len(inputs), "No")
+
+# print("\nRandom generated model accuracy =\n", accuracy_score(test_targets, random_guess(test_inputs)))
+# print("\nAll 'No' model accuracy =\n", accuracy_score(test_targets, all_no(test_inputs)))
